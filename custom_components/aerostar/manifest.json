@@ -1,0 +1,12 @@
+{
+    "name": "Aerostar",
+    "domain": "aerostar",
+    "version": "0.0.1",
+    "requirements": [],
+    "dependencies": ["network"],
+    "codeowners": ["@BR0kEN-"],
+    "iot_class": "local_push",
+    "config_flow": true,
+    "documentation": "https://github.com/BR0kEN-/ha-aerostar",
+    "issue_tracker": "https://github.com/BR0kEN-/ha-aerostar/issues"
+}
