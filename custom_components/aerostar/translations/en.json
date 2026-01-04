@@ -1,0 +1,26 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "data": {
+                    "name": "The name of a device",
+                    "device": "Pick a device type:"
+                }
+            },
+            "vent": {
+                "description": "Configure the ventilation connection.",
+                "data": {
+                    "ip_address": "IP Address",
+                    "password": "Password"
+                }
+            }
+        }
+    },
+    "selector": {
+        "device": {
+            "options": {
+                "vent": "Ventilation"
+            }
+        }
+    }
+}

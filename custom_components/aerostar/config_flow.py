@@ -1,18 +1,20 @@
 from typing import Any
 
-import voluptuous as vol
+from voluptuous import In, Required, Schema
 from homeassistant import config_entries
+from homeassistant.const import CONF_DEVICE, CONF_ID, CONF_NAME
 
 from .base import idify
-from .const import DOMAIN, NAME, ATTR_DEVICE_TYPE
+from .const import DOMAIN, NAME
 from .device_types import DEVICE_TYPES
 
 
 UserInput = dict[str, Any] | None
 
 
-_STEP_SELECT_DEVICE = vol.Schema({
-    vol.Required(ATTR_DEVICE_TYPE): vol.In(DEVICE_TYPES.keys()),
+_STEP_SELECT_DEVICE = Schema({
+    Required(CONF_NAME): str,
+    Required(CONF_DEVICE): In(DEVICE_TYPES.keys()),
 })
 
 
@@ -26,7 +28,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data_schema=_STEP_SELECT_DEVICE,
             )
 
-        device_type = user_input[ATTR_DEVICE_TYPE]
+        device_name = user_input[CONF_NAME]
+        device_type = user_input[CONF_DEVICE]
         device = DEVICE_TYPES[device_type]
 
         async def _fn(device_config: UserInput = None):
@@ -37,15 +40,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
 
             device_id = device.get_id(device_config)
-            device_name = device.get_name(device_config)
 
             return self.async_create_entry(
                 title=f"{NAME} {device_name}",
                 data={
                     **device_config,
-                    "device_type": device_type,
+                    CONF_DEVICE: device_type,
+                    CONF_NAME: device_name,
                     # E.g. `aerostar_vent_ecostar_500_ec_x_192_168_0_33`.
-                    "id": idify(f"{DOMAIN}_{device_type}_{device_name}_{device_id}"),
+                    CONF_ID: idify(f"{DOMAIN}_{device_type}_{device_name}_{device_id}"),
                 },
             )
 

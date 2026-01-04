@@ -6,7 +6,7 @@ from contextlib import suppress
 
 from aiohttp.client_exceptions import ClientConnectorError
 from homeassistant.components.sensor import SensorDeviceClass
-from homeassistant.const import CONF_IP_ADDRESS, CONF_PASSWORD, CONF_NAME
+from homeassistant.const import CONF_IP_ADDRESS, CONF_PASSWORD
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -239,7 +239,6 @@ class AerostarVentilation(DeviceType[AerostarVentilationCoordinator]):
     def __init__(self) -> None:
         super().__init__(
             config_schema=Schema({
-                Required(CONF_NAME): str,
                 Required(CONF_IP_ADDRESS): str,
                 Required(CONF_PASSWORD): str,
             }),
@@ -247,9 +246,6 @@ class AerostarVentilation(DeviceType[AerostarVentilationCoordinator]):
 
     def get_id(self, user_input: dict) -> str:
         return user_input[CONF_IP_ADDRESS]
-
-    def get_name(self, user_input: dict) -> str:
-        return user_input[CONF_NAME]
 
 
 __all__ = [

@@ -1,9 +1,8 @@
-from homeassistant.const import Platform
+from homeassistant.const import Platform, CONF_DEVICE
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 
 from .base import Coordinator
-from .const import ATTR_DEVICE_TYPE
 from .device_types import DEVICE_TYPES
 
 
@@ -20,7 +19,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[Coordinator]) -> bool:
-    entry.runtime_data = DEVICE_TYPES[entry.data[ATTR_DEVICE_TYPE]].coordinator(hass, entry)
+    entry.runtime_data = DEVICE_TYPES[entry.data[CONF_DEVICE]].coordinator(hass, entry)
 
     await entry.runtime_data.async_setup()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

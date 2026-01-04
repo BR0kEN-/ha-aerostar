@@ -123,15 +123,6 @@ class DeviceType(Generic[_Coordinator], ABC):
         """
         raise NotImplementedError
 
-    def get_name(self, user_input: dict) -> str:
-        """
-        :param user_input: The user input from the config flow before the
-         config entry creation.
-        :return: The value that names the device.
-         Will be used to produce a unique device ID.
-        """
-        raise NotImplementedError
-
 
 class Entity(Generic[_Coordinator], EntityBase):
     def __init__(self, name: str, coordinator: _Coordinator) -> None:
