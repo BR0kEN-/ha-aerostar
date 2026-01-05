@@ -8,10 +8,10 @@ from homeassistant.components.climate.const import (
     FAN_LOW,
     FAN_MEDIUM,
     FAN_HIGH,
-    HVACMode,
     ATTR_FAN_MODE,
     ATTR_HVAC_MODE,
     ATTR_CURRENT_TEMPERATURE,
+    HVACMode,
     ClimateEntityFeature,
 )
 from homeassistant.const import (
@@ -20,10 +20,15 @@ from homeassistant.const import (
 )
 
 from ..aerostar import AerostarVentilationEntity, AerostarVentilationCoordinator
+from ..const import (
+    ATTR_EXTERNAL_SEASON,
+    ATTR_EXTERNAL_ENABLED,
+    ATTR_EXTERNAL_FAN_SPEED,
+    ATTR_EXTERNAL_SUPPLY_TEMPERATURE,
+    ATTR_EXTERNAL_TARGET_TEMPERATURE,
+)
 
 
-ATTR_EXT_TARGET_TEMPERATURE = "92552"
-ATTR_EXT_CURRENT_TEMPERATURE = "92544"
 ATTR_ENABLED = "enabled"
 
 
@@ -124,19 +129,19 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
     def __init__(self, coordinator: AerostarVentilationCoordinator) -> None:
         super().__init__(coordinator.config["instance"]["Name"], coordinator)
         self._attr_icon = "mdi:air-filter"
-        self._attr_min_temp = coordinator.config["variables"][ATTR_EXT_TARGET_TEMPERATURE]["control"]["min"]
-        self._attr_max_temp = coordinator.config["variables"][ATTR_EXT_TARGET_TEMPERATURE]["control"]["max"]
+        self._attr_min_temp = coordinator.config["variables"][ATTR_EXTERNAL_TARGET_TEMPERATURE]["control"]["min"]
+        self._attr_max_temp = coordinator.config["variables"][ATTR_EXTERNAL_TARGET_TEMPERATURE]["control"]["max"]
         self._attrs = {
             ATTR_ENABLED: Attr[Literal[1, 0]](
                 parent=self,
-                external_attr="92519",
+                external_attr=ATTR_EXTERNAL_ENABLED,
                 internal_attr="_attr_enabled",
                 default=0,
                 virtual=True,
             ),
             ATTR_FAN_MODE: Attr[str](
                 parent=self,
-                external_attr="92507",
+                external_attr=ATTR_EXTERNAL_FAN_SPEED,
                 internal_attr="_attr_fan_mode",
                 default=FAN_LOW,
                 options={
@@ -148,7 +153,7 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
             ),
             ATTR_HVAC_MODE: Attr[str](
                 parent=self,
-                external_attr="92537",
+                external_attr=ATTR_EXTERNAL_SEASON,
                 internal_attr="_attr_hvac_mode",
                 default=HVACMode.AUTO,
                 options={
@@ -162,15 +167,15 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
             ),
             ATTR_TEMPERATURE: Attr[float](
                 parent=self,
-                external_attr=ATTR_EXT_TARGET_TEMPERATURE,
+                external_attr=ATTR_EXTERNAL_TARGET_TEMPERATURE,
                 internal_attr="_attr_target_temperature",
                 default=20,
             ),
             ATTR_CURRENT_TEMPERATURE: Attr[float](
                 parent=self,
-                external_attr=ATTR_EXT_CURRENT_TEMPERATURE,
+                external_attr=ATTR_EXTERNAL_SUPPLY_TEMPERATURE,
                 internal_attr="_attr_current_temperature",
-                default=coordinator.data.get(ATTR_EXT_CURRENT_TEMPERATURE, 0),
+                default=coordinator.data.get(ATTR_EXTERNAL_SUPPLY_TEMPERATURE, 0),
             ),
         }
 

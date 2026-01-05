@@ -7,9 +7,8 @@ from homeassistant.core import HomeAssistant, callback
 from ..aerostar import AerostarVentilationEntity, AerostarVentilationCoordinator
 
 
+# noinspection Assert
 class AerostarSensor(AerostarVentilationEntity, SensorEntity):
-    _attr_state_class = SensorStateClass.MEASUREMENT
-
     def __init__(
         self,
         coordinator: AerostarVentilationCoordinator,
@@ -18,7 +17,25 @@ class AerostarSensor(AerostarVentilationEntity, SensorEntity):
         super().__init__(sensor["name"], coordinator)
 
         self._attr_device_class: Final[SensorDeviceClass | None] = sensor.get("device_class")
-        self._attr_native_unit_of_measurement: Final[str | None] = sensor.get("unit")
+
+        if self._attr_device_class == SensorDeviceClass.ENUM:
+            assert isinstance(sensor["unit"], dict)
+            options: list[str] = []
+            unit: dict[int, str] = {}
+
+            for key, value in sensor["unit"].items():
+                options.append(value)
+                # Typically the key is a stringified `int`.
+                unit[int(key)] = value
+
+            # Store for lookups as the state comes as an `int`.
+            sensor["unit"] = unit
+            self._attr_options: Final[list[str]] = options
+        else:
+            assert isinstance(sensor["unit"], str)
+            self._attr_state_class: Final[SensorStateClass] = SensorStateClass.MEASUREMENT
+            self._attr_native_unit_of_measurement: Final[str] = sensor["unit"]
+
         self._attr_extra_state_attributes: Final[dict] = sensor
 
     @classmethod
@@ -32,4 +49,9 @@ class AerostarSensor(AerostarVentilationEntity, SensorEntity):
 
     @callback
     def on_update(self, values: dict) -> None:
-        self._attr_native_value = self.coordinator.data.get(self._attr_extra_state_attributes["id"])
+        value = self.coordinator.data.get(self._attr_extra_state_attributes["id"])
+
+        if self._attr_device_class == SensorDeviceClass.ENUM:
+            self._attr_native_value = self._attr_extra_state_attributes["unit"].get(value)
+        else:
+            self._attr_native_value = value

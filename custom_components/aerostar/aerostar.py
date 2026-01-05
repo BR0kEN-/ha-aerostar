@@ -14,24 +14,32 @@ from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, format
 from voluptuous import Required, Schema
 
 from .base import Entity, DeviceType, Coordinator
+from .const import (
+    ATTR_EXTERNAL_SYSTEM_STATE,
+    ATTR_EXTERNAL_SYSTEM_ALARM,
+    ATTR_EXTERNAL_SUPPLY_TEMPERATURE,
+    ATTR_EXTERNAL_EXHAUST_TEMPERATURE,
+    ATTR_EXTERNAL_OUTDOOR_TEMPERATURE,
+    ATTR_EXTERNAL_EXHAUST_FAN,
+    ATTR_EXTERNAL_SUPPLY_FAN,
+    ATTR_EXTERNAL_ELECTRIC_HEATER_1,
+    ATTR_EXTERNAL_ELECTRIC_HEATER_2,
+    ATTR_EXTERNAL_BYPASS,
+)
 
 
 _LOGIN_API_PATH = "login"
 _SUPPORTED_SENSORS = {
-    # Exhaust temperature (C).
-    "92530": SensorDeviceClass.TEMPERATURE,
-    # Outdoor temperature (C).
-    "92547": SensorDeviceClass.TEMPERATURE,
-    # Exhaust fan (%).
-    "92510": None,
-    # Supply fan (%).
-    "92513": None,
-    # Electric heater 1 (%).
-    "92538": None,
-    # Electric heater 2 (%).
-    "92543": None,
-    # Bypass (%).
-    "92509": None,
+    ATTR_EXTERNAL_SYSTEM_STATE: SensorDeviceClass.ENUM,
+    ATTR_EXTERNAL_SYSTEM_ALARM: SensorDeviceClass.ENUM,
+    ATTR_EXTERNAL_SUPPLY_TEMPERATURE: SensorDeviceClass.TEMPERATURE,
+    ATTR_EXTERNAL_EXHAUST_TEMPERATURE: SensorDeviceClass.TEMPERATURE,
+    ATTR_EXTERNAL_OUTDOOR_TEMPERATURE: SensorDeviceClass.TEMPERATURE,
+    ATTR_EXTERNAL_EXHAUST_FAN: None,
+    ATTR_EXTERNAL_SUPPLY_FAN: None,
+    ATTR_EXTERNAL_ELECTRIC_HEATER_1: None,
+    ATTR_EXTERNAL_ELECTRIC_HEATER_2: None,
+    ATTR_EXTERNAL_BYPASS: None,
 }
 
 
