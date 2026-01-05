@@ -38,7 +38,6 @@ class Attr[_T]:
         parent: "AerostarVentilationClimate",
         external_attr: str,
         internal_attr: str,
-        default: _T,
         options: dict[_T, int] | None = None,
         virtual: bool = False,
     ) -> None:
@@ -46,7 +45,8 @@ class Attr[_T]:
         self.external_attr: Final[str] = external_attr
         self.internal_attr: Final[str] = internal_attr
         self.virtual: Final[bool] = virtual
-        self.default: Final[_T] = default
+
+        self.set_ha_state(parent.coordinator.data.get(external_attr))
 
         if options is not None:
             options = {
@@ -58,7 +58,7 @@ class Attr[_T]:
 
     @property
     def value(self) -> _T:
-        return getattr(self._parent, self.internal_attr, self.default)
+        return getattr(self._parent, self.internal_attr)
 
     def set_ha_state(self, value: _T, update_state: bool = False) -> None:
         setattr(self._parent, self.internal_attr, value)
@@ -71,7 +71,7 @@ class Attr[_T]:
             value = values.get(self.external_attr)
 
             self.set_ha_state(
-                self.options["ext2int"].get(value, self.default)
+                self.options["ext2int"].get(value, self.value)
                 if self.options
                 else value
             )
@@ -136,14 +136,12 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
                 parent=self,
                 external_attr=ATTR_EXTERNAL_ENABLED,
                 internal_attr="_attr_enabled",
-                default=0,
                 virtual=True,
             ),
             ATTR_FAN_MODE: Attr[str](
                 parent=self,
                 external_attr=ATTR_EXTERNAL_FAN_SPEED,
                 internal_attr="_attr_fan_mode",
-                default=FAN_LOW,
                 options={
                     FAN_AUTO: 0,
                     FAN_LOW: 1,
@@ -155,7 +153,6 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
                 parent=self,
                 external_attr=ATTR_EXTERNAL_SEASON,
                 internal_attr="_attr_hvac_mode",
-                default=HVACMode.AUTO,
                 options={
                     # Summer.
                     HVACMode.COOL: 0,
@@ -169,13 +166,11 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
                 parent=self,
                 external_attr=ATTR_EXTERNAL_TARGET_TEMPERATURE,
                 internal_attr="_attr_target_temperature",
-                default=20,
             ),
             ATTR_CURRENT_TEMPERATURE: Attr[float](
                 parent=self,
                 external_attr=ATTR_EXTERNAL_SUPPLY_TEMPERATURE,
                 internal_attr="_attr_current_temperature",
-                default=coordinator.data.get(ATTR_EXTERNAL_SUPPLY_TEMPERATURE, 0),
             ),
         }
 
