@@ -49,7 +49,7 @@ class AerostarVentilationCoordinator(Coordinator):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         super().__init__(hass, entry)
 
-        self._ip: Final[str] = entry.data[CONF_IP_ADDRESS]
+        self.ip: Final[str] = entry.data[CONF_IP_ADDRESS]
         self._password: Final[str] = entry.data[CONF_PASSWORD]
         self._token: str | None = None
         self._session: aiohttp.ClientSession | None = None
@@ -141,7 +141,7 @@ class AerostarVentilationCoordinator(Coordinator):
 
         # noinspection HttpUrlsUsage
         async with self._session.request(
-            url=f"http://{self._ip}/api/{path}",
+            url=f"http://{self.ip}/api/{path}",
             json=data,
             method=method,
             timeout=10,
@@ -203,7 +203,7 @@ class AerostarVentilationCoordinator(Coordinator):
                 await self._refresh_token()
 
             self._ws = await self._session.ws_connect(
-                f"ws://{self._ip}/ws",
+                f"ws://{self.ip}/ws",
                 headers={
                     "Authorization": self._token,
                 },
@@ -253,6 +253,8 @@ class AerostarVentilationEntity(Entity[AerostarVentilationCoordinator]):
     def __init__(self, name: str, coordinator: AerostarVentilationCoordinator) -> None:
         super().__init__(name, coordinator)
 
+        # noinspection HttpUrlsUsage
+        self._attr_device_info["configuration_url"] = f"http://{coordinator.ip}"
         self._attr_device_info["sw_version"] = coordinator.config["system"].get("version_idf")
 
         if mac_address := coordinator.config["system"].get("mac"):
