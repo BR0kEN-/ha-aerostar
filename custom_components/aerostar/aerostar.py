@@ -6,7 +6,7 @@ from contextlib import suppress
 
 from aiohttp.client_exceptions import ClientConnectorError
 from homeassistant.components.sensor import SensorDeviceClass
-from homeassistant.const import CONF_IP_ADDRESS, CONF_PASSWORD
+from homeassistant.const import CONF_IP_ADDRESS, CONF_PASSWORD, UnitOfTemperature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -76,6 +76,22 @@ class AerostarVentilationCoordinator(Coordinator):
                     "instance": instance,
                     "system": system,
                 }
+
+                for var_id, var_def in self.config["variables"].items():
+                    unit = var_def.get("unit")
+
+                    if isinstance(unit, dict):
+                        coerced_unit = {}
+
+                        for key, value in unit.items():
+                            # Typically the key is a stringified `int` while the status
+                            # update comes as an `int` and must be sent like that.
+                            coerced_unit[int(key)] = value
+
+                        self.config["variables"][var_id]["unit"] = coerced_unit
+                    # Cyrillic `С`.
+                    elif unit == "°С":
+                        self.config["variables"][var_id]["unit"] = UnitOfTemperature.CELSIUS
 
                 if not self._ws_task or self._ws_task.done():
                     self._ws_task = self.hass.async_create_background_task(

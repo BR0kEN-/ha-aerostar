@@ -1,3 +1,4 @@
+from functools import reduce
 from typing import Any, AsyncGenerator, Final, Literal, Self
 
 from homeassistant.config_entries import ConfigEntry
@@ -10,7 +11,9 @@ from homeassistant.components.climate.const import (
     FAN_HIGH,
     ATTR_FAN_MODE,
     ATTR_HVAC_MODE,
+    ATTR_HVAC_ACTION,
     ATTR_CURRENT_TEMPERATURE,
+    HVACAction,
     HVACMode,
     ClimateEntityFeature,
 )
@@ -24,12 +27,48 @@ from ..const import (
     ATTR_EXTERNAL_SEASON,
     ATTR_EXTERNAL_ENABLED,
     ATTR_EXTERNAL_FAN_SPEED,
+    ATTR_EXTERNAL_SYSTEM_STATE,
     ATTR_EXTERNAL_SUPPLY_TEMPERATURE,
     ATTR_EXTERNAL_TARGET_TEMPERATURE,
+    ATTR_EXTERNAL_ELECTRIC_HEATER_1,
+    ATTR_EXTERNAL_ELECTRIC_HEATER_2,
 )
 
 
 ATTR_ENABLED = "enabled"
+
+FAN_MODES = {
+    FAN_AUTO: 0,
+    FAN_LOW: 1,
+    FAN_MEDIUM: 2,
+    FAN_HIGH: 3,
+}
+
+HVAC_MODES = {
+    # Summer.
+    HVACMode.COOL: 0,
+    # Winter.
+    HVACMode.HEAT: 1,
+    # Auto.
+    HVACMode.AUTO: 2,
+}
+
+HVAC_ACTIONS = {
+    # Off.
+    HVACAction.OFF: 0,
+    # On.
+    HVACAction.FAN: 1,
+    # Blowing.
+    HVACAction.DRYING: 2,
+    # Louvers.
+    HVACAction.IDLE: 3,
+    # Freecool.
+    HVACAction.COOLING: 4,
+    # Warming.
+    HVACAction.PREHEATING: 5,
+    # Defrost.
+    HVACAction.DEFROSTING: 6,
+}
 
 
 class Attr[_T]:
@@ -46,8 +85,6 @@ class Attr[_T]:
         self.internal_attr: Final[str] = internal_attr
         self.virtual: Final[bool] = virtual
 
-        self.set_ha_state(parent.coordinator.data.get(external_attr))
-
         if options is not None:
             options = {
                 "int2ext": options,
@@ -60,7 +97,13 @@ class Attr[_T]:
     def value(self) -> _T:
         return getattr(self._parent, self.internal_attr)
 
-    def set_ha_state(self, value: _T, update_state: bool = False) -> None:
+    def set_ha_state(self, value: _T | Self, update_state: bool = False) -> None:
+        if value is self:
+            value = self.value
+
+        if process := getattr(self._parent, f"_compute_{self.internal_attr}", None):
+            value = process(value)
+
         setattr(self._parent, self.internal_attr, value)
 
         if update_state:
@@ -71,7 +114,7 @@ class Attr[_T]:
             value = values.get(self.external_attr)
 
             self.set_ha_state(
-                self.options["ext2int"].get(value, self.value)
+                self.options["ext2int"].get(value, self)
                 if self.options
                 else value
             )
@@ -142,25 +185,19 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
                 parent=self,
                 external_attr=ATTR_EXTERNAL_FAN_SPEED,
                 internal_attr="_attr_fan_mode",
-                options={
-                    FAN_AUTO: 0,
-                    FAN_LOW: 1,
-                    FAN_MEDIUM: 2,
-                    FAN_HIGH: 3,
-                },
+                options=FAN_MODES,
             ),
             ATTR_HVAC_MODE: Attr[str](
                 parent=self,
                 external_attr=ATTR_EXTERNAL_SEASON,
                 internal_attr="_attr_hvac_mode",
-                options={
-                    # Summer.
-                    HVACMode.COOL: 0,
-                    # Winter.
-                    HVACMode.HEAT: 1,
-                    # Auto.
-                    HVACMode.AUTO: 2,
-                },
+                options=HVAC_MODES,
+            ),
+            ATTR_HVAC_ACTION: Attr[str](
+                parent=self,
+                external_attr=ATTR_EXTERNAL_SYSTEM_STATE,
+                internal_attr="_attr_hvac_action",
+                options=HVAC_ACTIONS,
             ),
             ATTR_TEMPERATURE: Attr[float](
                 parent=self,
@@ -214,3 +251,19 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
                 await self._attrs[ATTR_HVAC_MODE].sync(hvac_mode, (self._attrs[ATTR_ENABLED], 1))
             else:
                 await self._attrs[ATTR_HVAC_MODE].sync(hvac_mode)
+
+    def _compute__attr_hvac_action(self, hvac_action: HVACAction) -> HVACAction:
+        if hvac_action == HVACAction.FAN:
+            heating_percentage = reduce(
+                lambda agg, key: agg + self.coordinator.data.get(key, 0),
+                (
+                    ATTR_EXTERNAL_ELECTRIC_HEATER_1,
+                    ATTR_EXTERNAL_ELECTRIC_HEATER_2,
+                ),
+                0,
+            )
+
+            if heating_percentage > 0:
+                return HVACAction.HEATING
+
+        return hvac_action
