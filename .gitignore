@@ -3,6 +3,8 @@
 
 !.git*
 !/hacs.json
+!/Makefile
+!/pyproject.toml
 !/README.md
 
 !/custom_components/

@@ -1,5 +1,5 @@
 from functools import reduce
-from typing import Any, AsyncGenerator, Callable, Final, Literal, Self
+from typing import Any, AsyncGenerator, Final, Literal, Self
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -78,20 +78,13 @@ class Attr[_T]:
         parent: "AerostarVentilationClimate",
         external_attr: str,
         internal_attr: str,
-        dependencies: tuple[str, ...] | None = None,
         options: dict[_T, int] | None = None,
         virtual: bool = False,
     ) -> None:
         self._parent: Final["AerostarVentilationClimate"] = parent
-        self.dependencies: Final[tuple[str, ...]] = dependencies or ()
         self.external_attr: Final[str] = external_attr
         self.internal_attr: Final[str] = internal_attr
         self.virtual: Final[bool] = virtual
-        self.process: Final[Callable[[_T], _T] | None] = getattr(
-            self._parent,
-            f"_compute_{self.internal_attr}",
-            None,
-        )
 
         if options is not None:
             options = {
@@ -106,28 +99,12 @@ class Attr[_T]:
         return getattr(self._parent, self.internal_attr)
 
     def set_ha_state(self, value: _T | Self, update_state: bool = False) -> None:
-        if value is self:
-            value = self.value
-
-        if self.process:
-            value = self.process(value)
-
         setattr(self._parent, self.internal_attr, value)
 
         if update_state:
             self._parent.async_write_ha_state()
 
     def set_from_external_state(self, values: dict) -> None:
-        if self.process and self.external_attr not in values:
-            for dependency in self.dependencies:
-                if dependency in values:
-                    # The current attribute is unchanged however its
-                    # dependency did. Ensure the current value exists
-                    # in an update chunk to fall down into the branch
-                    # of computing the HA state.
-                    values[self.external_attr] = self.value
-                    break
-
         if self.external_attr in values:
             value = values.get(self.external_attr)
 
@@ -216,11 +193,6 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
                 external_attr=ATTR_EXTERNAL_SYSTEM_STATE,
                 internal_attr="_attr_hvac_action",
                 options=HVAC_ACTIONS,
-                dependencies=(
-                    ATTR_EXTERNAL_RECUPERATOR_ICING,
-                    ATTR_EXTERNAL_ELECTRIC_HEATER_1,
-                    ATTR_EXTERNAL_ELECTRIC_HEATER_2,
-                ),
             ),
             ATTR_TEMPERATURE: Attr[float](
                 parent=self,
@@ -275,8 +247,13 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
             else:
                 await self._attrs[ATTR_HVAC_MODE].sync(hvac_mode)
 
-    def _compute__attr_hvac_action(self, hvac_action: HVACAction) -> HVACAction:
-        if hvac_action == HVACAction.FAN:
+    # The `@property` use is intentional (avoid `@cached_property`).
+    @property
+    def hvac_action(self) -> HVACAction | None:
+        action = super().hvac_action
+
+        # Internally the action is `FAN` and it has derivatives.
+        if action == HVACAction.FAN:
             # When this is true the HRV unit is increasing the exhaust fan
             # and decreasing the supply fan. This prevents recuperator icing.
             # The state lasts until the temperature after the recuperator is
@@ -296,4 +273,4 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
             if heating_percentage > 0:
                 return HVACAction.HEATING
 
-        return hvac_action
+        return action
