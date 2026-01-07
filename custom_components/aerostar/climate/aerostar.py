@@ -1,5 +1,5 @@
 from functools import reduce
-from typing import Any, AsyncGenerator, Final, Literal, Self
+from typing import Any, AsyncGenerator, Final, Self
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -37,39 +37,60 @@ from ..const import (
 
 
 ATTR_ENABLED = "enabled"
+ATTR_RECUPERATOR_ICING = "recuperator_icing"
+ATTR_ELECTRIC_HEATER_1 = "electric_heater1"
+ATTR_ELECTRIC_HEATER_2 = "electric_heater2"
 
-FAN_MODES = {
-    FAN_AUTO: 0,
-    FAN_LOW: 1,
-    FAN_MEDIUM: 2,
-    FAN_HIGH: 3,
+FAN_MODES: Final = {
+    FAN_AUTO:       0,
+    FAN_LOW:        1,
+    FAN_MEDIUM:     2,
+    FAN_HIGH:       3,
 }
 
-HVAC_MODES = {
+HVAC_MODES: Final = {
     # Summer.
-    HVACMode.COOL: 0,
+    HVACMode.COOL:  0,
     # Winter.
-    HVACMode.HEAT: 1,
+    HVACMode.HEAT:  1,
     # Auto.
-    HVACMode.AUTO: 2,
+    HVACMode.AUTO:  2,
 }
 
-HVAC_ACTIONS = {
+HVAC_ACTIONS: Final = {
     # Off.
-    HVACAction.OFF: 0,
+    HVACAction.OFF:         0,
     # On.
-    HVACAction.FAN: 1,
-    # Blowing.
-    HVACAction.DRYING: 2,
-    # Louvers.
-    HVACAction.IDLE: 3,
-    # Freecool.
-    HVACAction.COOLING: 4,
-    # Warming.
-    HVACAction.PREHEATING: 5,
-    # Defrost.
-    HVACAction.DEFROSTING: 6,
+    HVACAction.FAN:         1,
+    # Blowing (transitions to from `On`).
+    HVACAction.DRYING:      2,
+    # Louvers (transitions to from `Off`).
+    HVACAction.IDLE:        3,
+    # Freecool (unclear when it's active).
+    HVACAction.COOLING:     4,
+    # Warming (unclear when it's active).
+    HVACAction.PREHEATING:  5,
+    # Defrost (unclear when it's active).
+    HVACAction.DEFROSTING:  6,
 }
+
+_ATTRS_VIRTUAL: Final = (
+    # Values: `0`, `1`.
+    (ATTR_ENABLED,              ATTR_EXTERNAL_ENABLED,              False),
+    (ATTR_RECUPERATOR_ICING,    ATTR_EXTERNAL_RECUPERATOR_ICING,    True),
+    (ATTR_ELECTRIC_HEATER_1,    ATTR_EXTERNAL_ELECTRIC_HEATER_1,    True),
+    (ATTR_ELECTRIC_HEATER_2,    ATTR_EXTERNAL_ELECTRIC_HEATER_2,    True),
+)
+
+_ATTRS_EXTERNAL: Final = (
+    (ATTR_FAN_MODE,             ATTR_EXTERNAL_FAN_SPEED,            None,                   FAN_MODES),
+    (ATTR_HVAC_MODE,            ATTR_EXTERNAL_SEASON,               None,                   HVAC_MODES),
+    (ATTR_HVAC_ACTION,          ATTR_EXTERNAL_SYSTEM_STATE,         None,                   HVAC_ACTIONS),
+    # Type: `float`.
+    (ATTR_TEMPERATURE,          ATTR_EXTERNAL_TARGET_TEMPERATURE,   "target_temperature",   None),
+    # Type: `float`.
+    (ATTR_CURRENT_TEMPERATURE,  ATTR_EXTERNAL_SUPPLY_TEMPERATURE,   None,                   None),
+)
 
 
 class Attr[_T]:
@@ -80,11 +101,13 @@ class Attr[_T]:
         internal_attr: str,
         options: dict[_T, int] | None = None,
         virtual: bool = False,
+        readonly: bool = False,
     ) -> None:
         self._parent: Final["AerostarVentilationClimate"] = parent
         self.external_attr: Final[str] = external_attr
-        self.internal_attr: Final[str] = internal_attr
+        self.internal_attr: Final[str] = f"_attr_{internal_attr}"
         self.virtual: Final[bool] = virtual
+        self.readonly: Final[bool] = readonly
 
         if options is not None:
             options = {
@@ -96,23 +119,34 @@ class Attr[_T]:
 
     @property
     def value(self) -> _T:
-        return getattr(self._parent, self.internal_attr)
+        return getattr(self._parent, self.internal_attr, None)
 
-    def set_ha_state(self, value: _T | Self, update_state: bool = False) -> None:
+    def set_ha_state(self, value: _T, update_state: bool = False) -> bool:
+        prev = self.value
         setattr(self._parent, self.internal_attr, value)
 
         if update_state:
             self._parent.async_write_ha_state()
 
-    def set_from_external_state(self, values: dict) -> None:
+        return value != prev
+
+    def set_from_external_state(self, values: dict) -> bool:
         if self.external_attr in values:
             value = values.get(self.external_attr)
 
-            self.set_ha_state(
-                self.options["ext2int"].get(value, self)
-                if self.options
-                else value
+            if not self.options:
+                return self.set_ha_state(value)
+
+            if value in self.options["ext2int"]:
+                return self.set_ha_state(self.options["ext2int"][value])
+
+            self._parent.coordinator.logger.warning(
+                (
+                    f'{value} of "{self.internal_attr}" cannot be set to "{self.external_attr}"'
+                ),
             )
+
+        return False
 
     async def sync(self, value: _T, *attrs: tuple[Self, Any]) -> None:
         """
@@ -124,11 +158,16 @@ class Attr[_T]:
             for attr, attr_value in ((self, value), *attrs):
                 attr.set_ha_state(attr_value, update_state=not attr.virtual)
 
-                data[attr.external_attr] = (
-                    attr.options["int2ext"].get(attr_value)
-                    if attr.options
-                    else attr_value
-                )
+                if attr.readonly:
+                    self._parent.coordinator.logger.warning(
+                        f'{attr_value} of "{attr.external_attr}" is readonly',
+                    )
+                else:
+                    data[attr.external_attr] = (
+                        attr.options["int2ext"].get(attr_value)
+                        if attr.options
+                        else attr_value
+                    )
 
             result = await self._parent.coordinator.async_request(
                 path="values",
@@ -142,7 +181,9 @@ class Attr[_T]:
             if result != "OK":
                 raise RuntimeError(result)
         except Exception as error:
-            self._parent.coordinator.logger.warning(f"failed to set {self.internal_attr} to {value}: {error}")
+            self._parent.coordinator.logger.warning(
+                f"failed to set {self.internal_attr} to {value}: {error}",
+            )
 
 
 class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
@@ -170,40 +211,16 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
         self._attr_min_temp = coordinator.config["variables"][ATTR_EXTERNAL_TARGET_TEMPERATURE]["control"]["min"]
         self._attr_max_temp = coordinator.config["variables"][ATTR_EXTERNAL_TARGET_TEMPERATURE]["control"]["max"]
         self._attrs = {
-            ATTR_ENABLED: Attr[Literal[1, 0]](
-                parent=self,
-                external_attr=ATTR_EXTERNAL_ENABLED,
-                internal_attr=f"_attr_{ATTR_ENABLED}",
-                virtual=True,
-            ),
-            ATTR_FAN_MODE: Attr[str](
-                parent=self,
-                external_attr=ATTR_EXTERNAL_FAN_SPEED,
-                internal_attr="_attr_fan_mode",
-                options=FAN_MODES,
-            ),
-            ATTR_HVAC_MODE: Attr[str](
-                parent=self,
-                external_attr=ATTR_EXTERNAL_SEASON,
-                internal_attr="_attr_hvac_mode",
-                options=HVAC_MODES,
-            ),
-            ATTR_HVAC_ACTION: Attr[str](
-                parent=self,
-                external_attr=ATTR_EXTERNAL_SYSTEM_STATE,
-                internal_attr="_attr_hvac_action",
-                options=HVAC_ACTIONS,
-            ),
-            ATTR_TEMPERATURE: Attr[float](
-                parent=self,
-                external_attr=ATTR_EXTERNAL_TARGET_TEMPERATURE,
-                internal_attr="_attr_target_temperature",
-            ),
-            ATTR_CURRENT_TEMPERATURE: Attr[float](
-                parent=self,
-                external_attr=ATTR_EXTERNAL_SUPPLY_TEMPERATURE,
-                internal_attr="_attr_current_temperature",
-            ),
+            **{
+                internal_attr: Attr(self, external_attr, internal_attr, virtual=True, readonly=readonly)
+                for internal_attr, external_attr, readonly
+                in _ATTRS_VIRTUAL
+            },
+            **{
+                internal_attr: Attr(self, external_attr, mapped_to_attr or internal_attr, options=options)
+                for internal_attr, external_attr, mapped_to_attr, options
+                in _ATTRS_EXTERNAL
+            },
         }
 
     @classmethod
@@ -215,12 +232,17 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
         yield cls(entry.runtime_data)
 
     @callback
-    def on_update(self, values: dict) -> None:
-        for attr in self._attrs.values():
-            attr.set_from_external_state(values)
+    def on_update(self, values: dict) -> bool:
+        changed = False
 
-        if self._attrs[ATTR_ENABLED].value == 0:
-            self._attrs[ATTR_HVAC_MODE].set_ha_state(HVACMode.OFF)
+        for attr in self._attrs.values():
+            if attr.set_from_external_state(values):
+                changed = True
+
+        if self._attrs[ATTR_ENABLED].value == 0 and self._attrs[ATTR_HVAC_MODE].set_ha_state(HVACMode.OFF):
+            changed = True
+
+        return changed
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         if (temp := kwargs.get(ATTR_TEMPERATURE)) is None:
@@ -252,20 +274,21 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
     def hvac_action(self) -> HVACAction | None:
         action = super().hvac_action
 
-        # Internally the action is `FAN` and it has derivatives.
+        # Check if base action is `FAN` to determine special handling requirements.
+        # Note: this property is computed on each access (not cached), which is
+        # critical - overriding `hvac_action` directly prevents restoration of the
+        # base `FAN` state when special conditions end.
         if action == HVACAction.FAN:
-            # When this is true the HRV unit is increasing the exhaust fan
-            # and decreasing the supply fan. This prevents recuperator icing.
-            # The state lasts until the temperature after the recuperator is
-            # a couple of degrees above 0.
-            if self.coordinator.data.get(ATTR_EXTERNAL_RECUPERATOR_ICING):
+            # Anti-icing mode: HRV boosts exhaust and reduces supply to prevent
+            # recuperator freezing. Active until temperature rises above ~2°C.
+            if self._attrs[ATTR_RECUPERATOR_ICING].value:
                 return HVACAction.PREHEATING
 
             heating_percentage = reduce(
-                lambda agg, key: agg + self.coordinator.data.get(key, 0),
+                lambda agg, key: agg + self._attrs[key].value,
                 (
-                    ATTR_EXTERNAL_ELECTRIC_HEATER_1,
-                    ATTR_EXTERNAL_ELECTRIC_HEATER_2,
+                    ATTR_ELECTRIC_HEATER_1,
+                    ATTR_ELECTRIC_HEATER_2,
                 ),
                 0,
             )

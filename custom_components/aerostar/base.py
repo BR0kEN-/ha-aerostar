@@ -93,8 +93,8 @@ class Coordinator(ABC):
 
         @callback
         def _handler(*args: Any) -> None:
-            cb(*args)
-            entity.async_write_ha_state()
+            if cb(*args):
+                entity.async_write_ha_state()
 
         entity.async_on_remove(
             async_dispatcher_connect(
@@ -149,7 +149,7 @@ class Entity(Generic[_Coordinator], EntityBase):
         raise NotImplementedError
 
     @callback
-    def on_update(self, values: dict) -> None:
+    def on_update(self, values: dict) -> bool:
         raise NotImplementedError
 
 

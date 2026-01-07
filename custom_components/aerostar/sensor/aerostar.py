@@ -37,10 +37,13 @@ class AerostarSensor(AerostarVentilationEntity, SensorEntity):
             yield cls(entry.runtime_data, sensor)
 
     @callback
-    def on_update(self, values: dict) -> None:
+    def on_update(self, values: dict) -> bool:
         value = self.coordinator.data.get(self._attr_extra_state_attributes["id"])
+        prev = self._attr_native_value
 
         if self._attr_device_class == SensorDeviceClass.ENUM:
             self._attr_native_value = self._attr_extra_state_attributes["unit"].get(value)
         else:
             self._attr_native_value = value
+
+        return self._attr_native_value != prev

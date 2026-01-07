@@ -34,9 +34,12 @@ class AerostarVentilationAlertSensor(AerostarVentilationEntity, BinarySensorEnti
             yield cls(entry.runtime_data, sensor)
 
     @callback
-    def on_update(self, values: dict) -> None:
+    def on_update(self, values: dict) -> bool:
         # `None`, `0`, or `1`.
         value = self.coordinator.data.get(self._attr_extra_state_attributes["id"])
+        prev = self._attr_is_on
 
         self._attr_is_on = None if value is None else bool(value)
         self._attr_extra_state_attributes["value"] = value
+
+        return self._attr_is_on != prev
