@@ -62,15 +62,33 @@ HVAC_ACTIONS: Final = {
     HVACAction.OFF:         0,
     # On.
     HVACAction.FAN:         1,
-    # Blowing (transitions to from `On`).
+    # Blowing.
+    #
+    # Transitions from `On` if heating elements were at work.
     HVACAction.DRYING:      2,
-    # Louvers (transitions to from `Off`).
+    # Louvers.
+    #
+    # Transitions from `On` and `Off`.
     HVACAction.IDLE:        3,
-    # Freecool (unclear when it's active).
+    # Freecool.
+    #
+    # Works only in `Summer` mode and if the outside temperature
+    # is lower than the one is exhaust channel.
     HVACAction.COOLING:     4,
-    # Warming (unclear when it's active).
+    # Warming.
+    #
+    # Works only in `Winter` mode and if the water heat is installed.
+    # Applies on turning on.
     HVACAction.PREHEATING:  5,
-    # Defrost (unclear when it's active).
+    # Defrost.
+    #
+    # Works only in `Winter` mode and if the compressor-condensing
+    # unit (CCU) is installed. The signal comes from the CCU unit
+    # when the unit has frozen over and needs to be defrosted. CCU
+    # defrosts according to its own algorithm, and in this mode the
+    # unit reduces the speed of the supply fan to a minimum so as
+    # not to supply cold air into the room, and the electric heater
+    # (or water heater) is connected to maintain the temperature.
     HVACAction.DEFROSTING:  6,
 }
 
@@ -275,12 +293,17 @@ class AerostarVentilationClimate(AerostarVentilationEntity, ClimateEntity):
         action = super().hvac_action
 
         # Check if base action is `FAN` to determine special handling requirements.
+        #
+        # It's unclear why the system doesn't set any of those derivative statuses
+        # on conditions seen below.
+        #
         # Note: this property is computed on each access (not cached), which is
         # critical - overriding `hvac_action` directly prevents restoration of the
         # base `FAN` state when special conditions end.
         if action == HVACAction.FAN:
             # Anti-icing mode: HRV boosts exhaust and reduces supply to prevent
             # recuperator freezing. Active until temperature rises above ~2°C.
+            # Confirmed by the Aerostar support.
             if self._attrs[ATTR_RECUPERATOR_ICING].value:
                 return HVACAction.PREHEATING
 
