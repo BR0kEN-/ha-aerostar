@@ -25,3 +25,8 @@
   {% endif %}
 {% endif %}
 ```
+
+## Screenshots
+
+![Climate](docs/images/1-climate.jpg)
+![Device](docs/images/2-device.jpg)
